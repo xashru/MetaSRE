@@ -18,14 +18,14 @@ from collections import Counter
 
 # ------------------------init parameters----------------------------
 
-CUDA = "3,4,5,6"
-DATASET = 'SemEval'  # dataset selection tacred,SemEval
-NUM_LABELS = 19  # TACRED:42, SemEval:19
-MAX_LENGTH = 128
+CUDA = "0"
+DATASET = 'malware'  # dataset selection tacred,SemEval
+NUM_LABELS = 4  # TACRED:42, SemEval:19
+MAX_LENGTH = 256
 BATCH_SIZE = 16
 LR = 1e-4
 EPS = 1e-8
-EPOCHS = 5  #
+EPOCHS = 10 #
 TOTAL_EPOCHS = 1
 MATE_EPOCHS = 10
 seed_val = 19
@@ -59,7 +59,7 @@ def format_time(elapsed):
 
 
 # cited: https://github.com/INK-USC/DualRE/blob/master/utils/scorer.py#L26
-def score(key, prediction, verbose=True, NO_RELATION=0):
+def score(key, prediction, verbose=True, NO_RELATION=-1):
     correct_by_relation = Counter()
     guessed_by_relation = Counter()
     gold_by_relation = Counter()
@@ -204,7 +204,7 @@ def main(argv=None):
     sentence_val = json.load(open('data/' + DATASET + '/test_sentence.json', 'r'))
     sentence_val_label = json.load(open('data/' + DATASET + '/test_label_id.json', 'r'))
     val_dataset = pre_processing(sentence_val, sentence_val_label)
-
+    print('val dataset size:', len(val_dataset))
     validation_dataloader = DataLoader(
         val_dataset,  # The validation samples.
         sampler=SequentialSampler(val_dataset),  # Pull out batches sequentially.
@@ -644,6 +644,9 @@ def main(argv=None):
 
          # final f1 validation
         print("final validation start...")
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+
         t0 = time.time()
 
         # Put the model in evaluation mode--the dropout layers behave differently during evaluation.
@@ -658,9 +661,11 @@ def main(argv=None):
         all_ground_truth = np.array([])
 
         # Evaluate data for one epoch
+        model_predictions = []
         for batch in validation_dataloader:
             # Unpack this training batch from our dataloader.
             b_input_ids = batch[0].to(device)
+
             b_input_mask = batch[1].to(device)
             b_labels = batch[2].to(device)
             b_e1_pos = batch[3].to(device)
@@ -686,6 +691,17 @@ def main(argv=None):
             labels_flat = label_ids.flatten()
             all_prediction = np.concatenate((all_prediction, pred_flat), axis=None)
             all_ground_truth = np.concatenate((all_ground_truth, labels_flat), axis=None)
+
+            for ii in range(b_input_ids.shape[0]):
+              decoded = tokenizer.decode(b_input_ids[ii], skip_special_tokens=False)
+              model_predictions.append([decoded, int(labels_flat[ii]), int(pred_flat[ii])])
+        print(len(model_predictions))
+        print(model_predictions)
+
+        with open('predictions.json', 'w') as fw:
+          json.dump(model_predictions, fw)
+            
+            
 
 
         # Calculate the average loss over all of the batches.
